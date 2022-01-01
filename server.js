@@ -13,8 +13,8 @@ const { sign } = require('crypto');
 
 // TLS is required
 const serverConfig = {
-    // key: fs.readFileSync('key.pem'),
-    // cert: fs.readFileSync('cert.pem'),
+    key: fs.readFileSync('key.pem'),
+    cert: fs.readFileSync('cert.pem'),
 };
 
 const handleRequest = function(request, response) {

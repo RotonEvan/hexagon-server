@@ -3,16 +3,32 @@ const Node = require('./Objects/Node')
 const HTTPS_PORT = process.env.PORT || 8443; //default port for https is 443
 const HTTP_PORT = 8001; //default port for http is 80
 
+const fs = require('fs');
 const http = require('http');
-const https = require('https');
+// const https = require('https');
 
 const WebSocket = require('ws');
+const { sign } = require('crypto');
+
 
 // TLS is required
 const serverConfig = {
-    key: fs.readFileSync('key.pem'),
-    cert: fs.readFileSync('cert.pem'),
+    // key: fs.readFileSync('key.pem'),
+    // cert: fs.readFileSync('cert.pem'),
 };
+
+const handleRequest = function(request, response) {
+    // console.log("request received : " + request);
+
+    //TO-DO
+    if (request.url === '/client.js') {
+        response.writeHead(200, { 'Content-Type': 'application/javascript' });
+        response.end(fs.readFileSync('client/client.js'));
+    } else {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(fs.readFileSync('client/index.html'));
+    }
+}
 
 // setting up server
 
@@ -97,14 +113,16 @@ function heartbeat() {
 }
 
 setInterval(() => {
-    for (const [id, node] of Object.entries(this.clients)) {
-        let ws = node.getWebsocket();
-        if (!ws.isAlive) {
-            let node_peers = node.getPeerList();
-            node_peers.forEach(peer => {
-                peer.removePeer(node);
-            });
+    if (this.clients) {
+        for (const [id, node] of Object.entries(this.clients)) {
+            let ws = node.getWebsocket();
+            if (!ws.isAlive) {
+                let node_peers = node.getPeerList();
+                node_peers.forEach(peer => {
+                    peer.removePeer(node);
+                });
+            }
+            ws.ping(['ping']);
         }
-        ws.ping(['ping']);
     }
 }, 3000);

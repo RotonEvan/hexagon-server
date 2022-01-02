@@ -5,7 +5,7 @@ const HTTP_PORT = 8001; //default port for http is 80
 
 const fs = require('fs');
 const http = require('http');
-// const https = require('https');
+const https = require('https');
 
 const WebSocket = require('ws');
 const { sign } = require('crypto');
@@ -41,19 +41,21 @@ const wss = new WebSocket.Server({ server: httpsServer });
 // signalling logic
 
 // map of clients
-clients = {}
-client_ids = []
+let clients = {}
+let client_ids = []
 
 wss.on('connection', ws => {
     // ws -> websocket of the connected peer
     ws.isAlive = true;
 
     // maintain isAlive status of ws
-    ws.on('pong', heartbeat);
+    // ws.on('pong', beat(ws));
 
     // on message from a client
     ws.on('message', async msg => {
+
         let signal = JSON.parse(msg);
+        console.log(signal);
         let from = signal.from;
         let to = signal.to;
         let context = signal.context;
@@ -66,24 +68,31 @@ wss.on('connection', ws => {
             if (context == 'JOIN') {
                 // onboard client and respond with peers list
                 // data contains the client-generated ID
+                // console.log(data);
                 let client = new Node(data.id, 0, [], 5, ws);
-                this.clients[data] = client;
-                this.client_ids.push(data.id);
+                clients[data.id] = client;
+                client_ids.push(data.id);
 
                 // find peers list
                 peer_list = [];
-                this.client_ids = shuffleArray(this.client_ids);
+                client_ids = shuffleArray(client_ids);
                 if (client_ids.length >= 5) {
-                    peer_list = this.client_ids.slice(0, 5);
+                    peer_list = client_ids.slice(0, 5);
                 } else {
-                    peer_list = this.client_ids;
+                    peer_list = client_ids;
                 }
 
                 //send peers list
                 sendMessage('server', data.id, 'PEER_LIST', JSON.stringify({ 'peer_list': peer_list }), ws);
+            } else if (context == 'SUCCESS_ACK') {
+                let peer1 = data.peer1;
+                let peer2 = data.peer2;
+                clients[peer1].addPeer(clients[peer2]);
+                clients[peer2].addPeer(clients[peer1]);
             }
         } else {
-            sendMessage(from, to, context, data, ws);
+            console.log(`sending ${from} to ${to}`);
+            sendMessage(from, to, context, signal.data, clients[to].getWebsocket());
         }
     })
 
@@ -108,21 +117,27 @@ function sendMessage(from, to, context, data, ws) {
     ws.send(JSON.stringify({ 'from': from, 'to': to, 'context': context, 'data': data }));
 }
 
-function heartbeat() {
-    this.isAlive = true;
+function beat(ws) {
+    ws.isAlive = true;
 }
 
 setInterval(() => {
-    if (this.clients) {
-        for (const [id, node] of Object.entries(this.clients)) {
+    if (clients) {
+        for (const [id, node] of Object.entries(clients)) {
             let ws = node.getWebsocket();
-            if (!ws.isAlive) {
-                let node_peers = node.getPeerList();
+            // console.log(ws.readyState);
+            if (ws.readyState != WebSocket.OPEN) {
+                console.log(`Removing ${id}`);
+                let node_peers = node.getPeersList();
                 node_peers.forEach(peer => {
                     peer.removePeer(node);
                 });
+                delete clients[id];
+                client_ids.splice(client_ids.indexOf(id), 1);
+                console.log(clients[id]);
+                console.log(`${id} removed`);
             }
-            ws.ping(['ping']);
+            // ws.ping(['ping']);
         }
     }
 }, 3000);
